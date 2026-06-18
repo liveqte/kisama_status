@@ -45,17 +45,10 @@ jobs:
           
           echo "✅ 哈希值重写替换成功！"
 
-      - name: Commit and Push Changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # 检查是否有文件发生实际变动，防止空提交引发报错
-          if git diff --exit-code; then
-            echo "💤 数据未发生实质改变，跳过本次提交。"
-          else
-            git add "$TARGET_FILE"
-            git commit -m "chore: 自动化更新 sync.php 安全认证哈希值"
-            git push
-            echo "🚀 更改已成功推送至存储库！"
-          fi
+      # 💡 ✨【核心新增】：将生成的单文件作为 Artifact 产物上报挂载
+      - name: Upload Sync PHP as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-php-release  # 暴露在网页端供你下载的压缩包名称
+          path: dist/sync.php     # 刚才清洗提取出来的纯净单文件路径
+          retention-days: 7       # 产物在 GitHub 服务器上的保留天数（7天足够且环保）
