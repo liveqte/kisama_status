@@ -845,6 +845,14 @@
                         const json = await res.json();
                         if (json && typeof json === 'object' && 'cpu' in json) {
                             node.statusData = json;
+                            
+                            // 💡 ✨【核心修复点】：联动探测熔断机制
+                            // 如果节点刚才处于离线失联状态 (OFF)，或者它的 baseData 至今为空（比如刚上线没国旗）
+                            // 立刻、马上在后台帮它插播触发一次 pollBaseInfo，无感抹平 5 分钟的定时器时差！
+                            if (node.status === 'offline' || !node.baseData) {
+                                pollBaseInfo(node);
+                            }
+                            
                             node.status = 'online'; 
                             return;
                         }
