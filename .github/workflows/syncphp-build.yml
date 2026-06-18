@@ -1,4 +1,4 @@
-name: Update Sync Token Hash
+name: Generate Sync PHP Artifact
 
 on:
   workflow_dispatch:
@@ -9,10 +9,8 @@ on:
         type: string
 
 jobs:
-  update-hash:
+  generate-artifact:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write  # 刚性赋予工作流写回仓库、推送更改的写权限
 
     steps:
       - name: Checkout Repository
@@ -22,12 +20,10 @@ jobs:
         run: |
           # 1. 获取输入的明文 Token 并计算其不可逆的 SHA-256 值
           PLAINTEXT_TOKEN="${{ github.event.inputs.token }}"
-          # 使用 echo -n 确保没有任何换行符污染哈希计算结果
           TOKEN_HASH=$(echo -n "$PLAINTEXT_TOKEN" | sha256sum | awk '{print $1}')
           echo "计算得到的 SHA-256 哈希值为: $TOKEN_HASH"
           
-          # 2. 定位仓库中的目标 PHP 文件
-          # 策略：智能兼容检查 status/sync.php 或 根目录下的 sync.php
+          # 2. 定位并锁定仓库中的目标 PHP 文件
           if [ -f "status/sync.php" ]; then
             TARGET_FILE="status/sync.php"
           elif [ -f "sync.php" ]; then
@@ -36,19 +32,20 @@ jobs:
             echo "❌ 错误: 未能在仓库中找到 sync.php 文件！"
             exit 1
           fi
-          
           echo "🎯 目标文件已锁定: $TARGET_FILE"
           
           # 3. 使用 sed 正则强力精准替换认证哈希所在行
-          # 匹配模式：define('AUTH_TOKEN_HASH', '旧哈希');
           sed -i "s/define('AUTH_TOKEN_HASH', '[^']*');/define('AUTH_TOKEN_HASH', '$TOKEN_HASH');/g" "$TARGET_FILE"
           
-          echo "✅ 哈希值重写替换成功！"
+          # 4. 🚨【检查这里】：必须创建 dist 目录并将文件复制过去，供下一步打包
+          mkdir -p dist
+          cp "$TARGET_FILE" dist/sync.php
+          echo "✅ 安全哈希注入并成功提取到 dist/sync.php！"
 
-      # 💡 ✨【核心新增】：将生成的单文件作为 Artifact 产物上报挂载
+      # 5. 将 dist/sync.php 转化为网页端可下载的 Artifact 产物
       - name: Upload Sync PHP as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sync-php-release  # 暴露在网页端供你下载的压缩包名称
-          path: dist/sync.php     # 刚才清洗提取出来的纯净单文件路径
-          retention-days: 7       # 产物在 GitHub 服务器上的保留天数（7天足够且环保）
+          name: sync-php-release  # 产物压缩包名称
+          path: dist/sync.php     # 刚性指定的提取路径
+          retention-days: 7
