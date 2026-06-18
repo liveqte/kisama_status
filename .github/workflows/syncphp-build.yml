@@ -1,0 +1,61 @@
+name: Update Sync Token Hash
+
+on:
+  workflow_dispatch:
+    inputs:
+      token:
+        description: '请输入你希望设置的明文 Token (例如 kisama)'
+        required: true
+        type: string
+
+jobs:
+  update-hash:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 刚性赋予工作流写回仓库、推送更改的写权限
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Calculate SHA-256 Hash & Replace in PHP
+        run: |
+          # 1. 获取输入的明文 Token 并计算其不可逆的 SHA-256 值
+          PLAINTEXT_TOKEN="${{ github.event.inputs.token }}"
+          # 使用 echo -n 确保没有任何换行符污染哈希计算结果
+          TOKEN_HASH=$(echo -n "$PLAINTEXT_TOKEN" | sha256sum | awk '{print $1}')
+          echo "计算得到的 SHA-256 哈希值为: $TOKEN_HASH"
+          
+          # 2. 定位仓库中的目标 PHP 文件
+          # 策略：智能兼容检查 status/sync.php 或 根目录下的 sync.php
+          if [ -f "status/sync.php" ]; then
+            TARGET_FILE="status/sync.php"
+          elif [ -f "sync.php" ]; then
+            TARGET_FILE="sync.php"
+          else
+            echo "❌ 错误: 未能在仓库中找到 sync.php 文件！"
+            exit 1
+          fi
+          
+          echo "🎯 目标文件已锁定: $TARGET_FILE"
+          
+          # 3. 使用 sed 正则强力精准替换认证哈希所在行
+          # 匹配模式：define('AUTH_TOKEN_HASH', '旧哈希');
+          sed -i "s/define('AUTH_TOKEN_HASH', '[^']*');/define('AUTH_TOKEN_HASH', '$TOKEN_HASH');/g" "$TARGET_FILE"
+          
+          echo "✅ 哈希值重写替换成功！"
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 检查是否有文件发生实际变动，防止空提交引发报错
+          if git diff --exit-code; then
+            echo "💤 数据未发生实质改变，跳过本次提交。"
+          else
+            git add "$TARGET_FILE"
+            git commit -m "chore: 自动化更新 sync.php 安全认证哈希值"
+            git push
+            echo "🚀 更改已成功推送至存储库！"
+          fi

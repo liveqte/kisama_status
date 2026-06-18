@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kisama Server Status - 全局服务器状态监控看板</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        /* ========================================================
+           🎯 KISAMA 专属：高级极简暖纸科技主题 (背景高反差渐变/暖色纸张外壳)
+           ======================================================== */
+        :root {
+            color-scheme: light !important;
+            --primary: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+            
+            --panel-bg: #fdfaf2;       /* 发黄的高级书籍/纸张底色 */
+            --card-sub-bg: #f5f0e1;    /* 纸张内嵌块/列头色 */
+            --border: #e6dfd1;         /* 暖纸色复古低饱和边框 */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            /* 高对比度立体金属性质的深浅银灰微渐变底色，将纸张容器完美向前推 */
+            background: linear-gradient(135deg, #b8c6db 0%, #f5f7fa 100%) !important;
+            min-height: 100vh;
+            color: var(--text-dark);
+            padding: 24px;
+            scrollbar-gutter: stable;
+        }
+
+        .clean-panel {
+            background: var(--panel-bg) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.04), 0 2px 4px -2px rgba(15, 23, 42, 0.04) !important;
+            transition: all 0.2s ease;
+        }
+
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* 顶部标题工具栏 */
+        .header {
+            padding: 14px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            letter-spacing: -0.02em;
+        }
+
+        .select-control {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.15s;
+        }
+        .select-control:focus {
+            border-color: var(--primary);
+        }
+
+        /* 顶部汇总大面板看板 */
+        .dashboard-summary {
+            padding: 16px 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .summary-card {
+            background: var(--card-sub-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .summary-card .title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .summary-card .value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            font-family: monospace, sans-serif;
+        }
+
+        /* 工具分段布局切换器 */
+        .segmented-control {
+            display: flex;
+            background: var(--card-sub-bg);
+            border: 1px solid var(--border);
+            padding: 2px;
+            border-radius: 8px;
+            gap: 2px;
+        }
+
+        .segmented-control button {
+            border: none;
+            background: transparent;
+            padding: 6px 12px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.15s;
+        }
+
+        .segmented-control button.active {
+            background: var(--panel-bg);
+            color: #2563eb;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        /* 卡片展示网格 */
+        .nodes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            gap: 16px;
+        }
+
+        .node-card {
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+
+        .node-title-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+            width: 100%;
+        }
+
+        .node-name-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .node-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .node-domain {
+            font-size: 0.75rem;
+            font-family: monospace;
+            color: var(--primary);
+            background: rgba(59, 130, 246, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            padding: 1px 6px;
+            border-radius: 4px;
+            display: inline-block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: max-content;
+            max-width: 260px;
+        }
+
+        /* 国家地理标签国旗样式 */
+        .flag-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 1.1rem;
+            line-height: 1;
+        }
+        .flag-icon img {
+            width: 18px;
+            height: auto;
+            border-radius: 2px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* 在线离线状态胶囊 */
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+        .status-chip.online {
+            background: #ecfdf5 !important;
+            color: #065f46 !important;
+            border: 1px solid #a7f3d0 !important;
+        }
+        .status-chip.offline {
+            background: #fef2f2 !important;
+            color: #991b1b !important;
+            border: 1px solid #fecaca !important;
+        }
+
+        .pulse {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+        .pulse.online { animation: pulse-green 1.5s infinite; }
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            70% { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        /* 进度条硬件测量组 */
+        .metric-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .metric-row {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .metric-label-group {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .progress-bar-bg {
+            width: 100%;
+            height: 6px;
+            background: #e6dfd1;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+        }
+
+        .fill-green { background: #10b981 !important; }
+        .fill-blue  { background: #3b82f6 !important; }
+        .fill-red   { background: #ef4444 !important; }
+
+        /* 流量与速率面板 */
+        .network-io-block {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            background: var(--card-sub-bg);
+            border-radius: 8px;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+        }
+
+        .network-column {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 0.75rem;
+            color: #475569;
+        }
+
+        .network-column .io-title {
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 2px;
+        }
+
+        .network-column span {
+            font-family: monospace;
+        }
+
+        .card-meta-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            color: #64748b;
+            border-top: 1px solid var(--border);
+            padding-top: 8px;
+        }
+
+        /* ========================================================
+           📋 刚性对齐定宽不换行表格明细样式 (NodeTable)
+           ======================================================== */
+        .node-table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        .node-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.82rem;
+            table-layout: fixed;
+        }
+
+        .node-table th {
+            background: var(--card-sub-bg) !important;
+            padding: 10px 14px;
+            font-weight: 600;
+            color: #64748b !important;
+            border-bottom: 1px solid var(--border) !important;
+        }
+
+        .node-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border) !important;
+            color: var(--text-dark) !important;
+            vertical-align: middle;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .node-table-row:hover {
+            background: var(--card-sub-bg) !important;
+        }
+
+        .table-progress-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+        }
+        .table-progress-box span {
+            font-family: monospace;
+            min-width: 30px;
+            text-align: right;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container">
+    
+    <div class="clean-panel header">
+        <h1>🖥️ Kisama Infrastructure Status Board</h1>
+        
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <span v-if="activeProxy" style="font-size: 0.75rem; font-weight: 700; color: #065f46; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 4px 10px; border-radius: 6px; font-family: monospace;">
+                ⚡ 备用链路锁定: {{ activeProxy }}
+            </span>
+
+            <select v-model="statusFilter" class="select-control">
+                <option value="all">🔍 显示全部主机</option>
+                <option value="online">🟢 仅显示在线 (ON)</option>
+                <option value="offline">🔴 仅显示离线 (OFF)</option>
+            </select>
+
+            <select v-model="sortBy" class="select-control">
+                <option value="name">🔤 按节点名称排序</option>
+                <option value="cpu">⚡ 按 CPU 负载排序</option>
+                <option value="ram">🧠 按内存使用率排序</option>
+                <option value="disk">💾 按磁盘使用率排序</option>
+            </select>
+
+            <div class="segmented-control">
+                <button :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">🎴 卡片布局</button>
+                <button :class="{ active: viewMode === 'table' }" @click="viewMode = 'table'">📋 表格明细</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="clean-panel dashboard-summary">
+        <div class="summary-card">
+            <div class="title">集群总活跃度 (在线率)</div>
+            <div class="value">{{ onlineCount }} / {{ nodes.length }}</div>
+        </div>
+        <div class="summary-card">
+            <div class="title">实时总瞬时下行网速</div>
+            <div class="value">{{ formatSpeed(totalSpeedDown) }}</div>
+        </div>
+        <div class="summary-card">
+            <div class="title">实时总瞬时上行网速</div>
+            <div class="value">{{ formatSpeed(totalSpeedUp) }}</div>
+        </div>
+        <div class="summary-card">
+            <div class="title">集群累计消耗总下行流量</div>
+            <div class="value">{{ formatBytes(totalTrafficDown) }}</div>
+        </div>
+        <div class="summary-card">
+            <div class="title">集群累计消耗总上行流量</div>
+            <div class="value">{{ formatBytes(totalTrafficUp) }}</div>
+        </div>
+    </div>
+
+    <div v-if="filteredAndSortedNodes.length === 0" class="clean-panel empty-state">
+        📦 没有匹配对应筛选条件的主机节点，请先检查发布源配置。
+    </div>
+
+    <div v-if="viewMode === 'card' && filteredAndSortedNodes.length > 0" class="nodes-grid">
+        <div v-for="node in filteredAndSortedNodes" :key="node.id" class="clean-panel node-card">
+            
+            <div class="card-header">
+                <div class="node-title-group">
+                    <div class="node-name-wrapper">
+                        <span class="flag-icon" title="地理定位">
+                            <span v-if="node.countryCode === 'LOCAL'">🏠</span>
+                            <span v-else-if="node.countryCode === 'UNKNOWN' || !node.countryCode">🌍</span>
+                            <span v-else-if="node.countryCode === 'checking'">⏳</span>
+                            <img v-else :src="'https://flagcdn.com/w20/' + node.countryCode.toLowerCase() + '.png'" />
+                        </span>
+                        <span class="node-name" :title="node.name">{{ node.name }}</span>
+                    </div>
+                    <span class="node-domain" :title="node.domain">{{ node.domain }}</span>
+                </div>
+                <div class="status-chip" :class="node.status">
+                    <span class="pulse" :class="node.status"></span>
+                    {{ node.status === 'online' ? 'ON' : 'OFF' }}
+                </div>
+            </div>
+
+            <div class="metric-section">
+                <div class="metric-row">
+                    <div class="metric-label-group">
+                        <span>CPU 负载 <span v-if="node.status === 'online' && node.baseData">({{ node.baseData.cpu_cores }}核)</span></span>
+                        <span>{{ node.status === 'online' && node.statusData ? node.statusData.cpu.usage.toFixed(1) : '0.0' }}%</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" :class="getBarColorClass(node.status === 'online' && node.statusData ? node.statusData.cpu.usage : 0)" :style="{ width: (node.status === 'online' && node.statusData ? node.statusData.cpu.usage : 0) + '%' }"></div>
+                    </div>
+                </div>
+
+                <div class="metric-row">
+                    <div class="metric-label-group">
+                        <span>内存占用 (RAM)</span>
+                        <span>
+                            {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.ram.used) : '0 B' }} / 
+                            {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.ram.total) : '0 B' }} 
+                            ({{ node.status === 'online' && node.statusData ? ((node.statusData.ram.used / node.statusData.ram.total) * 100).toFixed(1) : '0.0' }}%)
+                        </span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" :class="getBarColorClass(node.status === 'online' && node.statusData ? (node.statusData.ram.used / node.statusData.ram.total * 100) : 0)" :style="{ width: (node.status === 'online' && node.statusData ? (node.statusData.ram.used / node.statusData.ram.total * 100) : 0) + '%' }"></div>
+                    </div>
+                </div>
+
+                <div class="metric-row">
+                    <div class="metric-label-group">
+                        <span>磁盘存储 (Disk)</span>
+                        <span>
+                            {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.disk.used) : '0 B' }} / 
+                            {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.disk.total) : '0 B' }} 
+                            ({{ node.status === 'online' && node.statusData ? ((node.statusData.disk.used / node.statusData.disk.total) * 100).toFixed(1) : '0.0' }}%)
+                        </span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" :class="getBarColorClass(node.status === 'online' && node.statusData ? (node.statusData.disk.used / node.statusData.disk.total * 100) : 0)" :style="{ width: (node.status === 'online' && node.statusData ? (node.statusData.disk.used / node.statusData.disk.total * 100) : 0) + '%' }"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="network-io-block">
+                <div class="network-column">
+                    <span class="io-title">📥 DOWN (下载)</span>
+                    <span>速: {{ node.status === 'online' && node.statusData ? formatSpeed(node.statusData.network.down) : '0 B/s' }}</span>
+                    <span>量: {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.network.totalDown) : '0 B' }}</span>
+                </div>
+                <div class="network-column">
+                    <span class="io-title">📤 UP (上传)</span>
+                    <span>速: {{ node.status === 'online' && node.statusData ? formatSpeed(node.statusData.network.up) : '0 B/s' }}</span>
+                    <span>量: {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.network.totalUp) : '0 B' }}</span>
+                </div>
+            </div>
+
+            <div class="card-meta-footer">
+                <span :title="node.baseData?.os">💿 {{ node.status === 'online' && node.baseData ? getShortOs(node.baseData.os) : '-' }}</span>
+                <span>🕒 {{ node.status === 'online' && node.statusData ? formatUptime(node.statusData.uptime) : '-' }}</span>
+            </div>
+
+        </div>
+    </div>
+
+    <div v-if="viewMode === 'table' && filteredAndSortedNodes.length > 0" class="clean-panel node-table-wrapper">
+        <table class="node-table">
+            <colgroup>
+                <col style="width: 75px;" />   
+                <col style="width: 18%;" />    
+                <col style="width: 11%;" />    
+                <col style="width: 10%;" />    
+                <col style="width: 11%;" />    
+                <col style="width: 13%;" />    
+                <col style="width: 13%;" />    
+                <col style="width: 120px;" />  
+                <col style="width: 120px;" />  
+                <col style="width: 95px;" />   
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>状态</th>
+                    <th>节点名称 / 域名</th>
+                    <th>操作系统</th>
+                    <th>CPU 架构</th>
+                    <th>CPU 使用率</th>
+                    <th>内存 (RAM) 进度 / 总量</th>
+                    <th>磁盘 (Disk) 进度 / 总量</th>
+                    <th>当前下行/上行网速</th>
+                    <th>累计下行/上行流量</th>
+                    <th>在线运行时长</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="node in filteredAndSortedNodes" :key="node.id" class="node-table-row">
+                    <td>
+                        <div class="status-chip" :class="node.status">
+                            <span class="pulse" :class="node.status"></span>
+                            {{ node.status === 'online' ? 'ON' : 'OFF' }}
+                        </div>
+                    </td>
+                    <td class="truncate-cell">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="flag-icon" title="地理定位">
+                                <span v-if="node.countryCode === 'LOCAL'">🏠</span>
+                                <span v-else-if="node.countryCode === 'UNKNOWN' || !node.countryCode">🌍</span>
+                                <span v-else-if="node.countryCode === 'checking'">⏳</span>
+                                <img v-else :src="'https://flagcdn.com/w20/' + node.countryCode.toLowerCase() + '.png'" />
+                            </span>
+                            <div style="font-weight:700; color:var(--text-dark);" :title="node.name">{{ node.name }}</div>
+                        </div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-left: 26px;" :title="node.domain">{{ node.domain }}</div>
+                    </td>
+                    
+                    <td><span>{{ node.status === 'online' && node.baseData ? getShortOs(node.baseData.os) : '-' }}</span></td>
+                    <td>
+                        <code style="font-family: monospace; font-size: 0.78rem; background: var(--card-sub-bg); padding: 2px 4px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.03);">
+                            {{ node.status === 'online' && node.baseData ? node.baseData.arch : '-' }}
+                        </code>
+                    </td>
+                    
+                    <td>
+                        <div class="table-progress-box">
+                            <div class="progress-bar-bg" style="flex:1;">
+                                <div class="progress-bar-fill" :class="getBarColorClass(node.status === 'online' && node.statusData ? node.statusData.cpu.usage : 0)" :style="{ width: (node.status === 'online' && node.statusData ? node.statusData.cpu.usage : 0) + '%' }"></div>
+                            </div>
+                            <span>{{ node.status === 'online' && node.statusData ? node.statusData.cpu.usage.toFixed(0) : '0' }}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="table-progress-box">
+                            <div class="progress-bar-bg" style="flex:1;">
+                                <div class="progress-bar-fill" :class="getBarColorClass(node.status === 'online' && node.statusData ? (node.statusData.ram.used / node.statusData.ram.total * 100) : 0)" :style="{ width: (node.status === 'online' && node.statusData ? (node.statusData.ram.used / node.statusData.ram.total * 100) : 0) + '%' }"></div>
+                            </div>
+                            <span>{{ node.status === 'online' && node.statusData ? (node.statusData.ram.used / node.statusData.ram.total * 100).toFixed(0) : '0' }}%</span>
+                        </div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; text-align: right; font-family: monospace;">
+                            {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.ram.used) : '0 B' }} / {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.ram.total) : '0 B' }}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="table-progress-box">
+                            <div class="progress-bar-bg" style="flex:1;">
+                                <div class="progress-bar-fill" :class="getBarColorClass(node.status === 'online' && node.statusData ? (node.statusData.disk.used / node.statusData.disk.total * 100) : 0)" :style="{ width: (node.status === 'online' && node.statusData ? (node.statusData.disk.used / node.statusData.disk.total * 100) : 0) + '%' }"></div>
+                            </div>
+                            <span>{{ node.status === 'online' && node.statusData ? (node.statusData.disk.used / node.statusData.disk.total * 100).toFixed(0) : '0' }}%</span>
+                        </div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; text-align: right; font-family: monospace;">
+                            {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.disk.used) : '0 B' }} / {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.disk.total) : '0 B' }}
+                        </div>
+                    </td>
+                    <td style="font-family:monospace; font-size:0.8rem; line-height:1.3;">
+                        <div>📥 {{ node.status === 'online' && node.statusData ? formatSpeed(node.statusData.network.down) : '0 B/s' }}</div>
+                        <div>📤 {{ node.status === 'online' && node.statusData ? formatSpeed(node.statusData.network.up) : '0 B/s' }}</div>
+                    </td>
+                    <td style="font-family:monospace; font-size:0.8rem; line-height:1.3;">
+                        <div>📥 {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.network.totalDown) : '0 B' }}</div>
+                        <div>📤 {{ node.status === 'online' && node.statusData ? formatBytes(node.statusData.network.totalUp) : '0 B' }}</div>
+                    </td>
+                    <td style="color:var(--text-muted); font-weight:500;">
+                        {{ node.status === 'online' && node.statusData ? formatUptime(node.statusData.uptime) : '-' }}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<script>
+    const { createApp, ref, computed, watch, onMounted } = Vue;
+
+    createApp({
+        setup() {
+            const viewMode = ref(localStorage.getItem('status_view_mode') || 'card');
+            watch(viewMode, (nV) => localStorage.setItem('status_view_mode', nV));
+
+            const statusFilter = ref('all');
+            const sortBy = ref('name');
+
+            const nodes = ref([]);
+            const proxyPool = ref([]);
+            // 💡 ✨【状态机重塑】：定义全局唯一锁定的高可用代理节点变量
+            const activeProxy = ref(''); 
+            const flagCache = new Map();
+
+            const isPrivateIP = (ip) => /^(10\.|192\.168\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(ip) || ip === '0.0.0.0' || ip === '::1';
+
+            const getBarColorClass = (usage) => {
+                if (usage < 40) return 'fill-green';  
+                if (usage < 80) return 'fill-blue';   
+                return 'fill-red';                    
+            };
+
+            // ========================================================
+            // 💡 ✨【全量修复版：自适应协议补全与主备降级重写算法】
+            // ========================================================
+            const buildRequestUrl = (nodeDomain, apiPath) => {
+                let cleanDomain = nodeDomain.replace(/\/+$/, '');
+                
+                // 💡 ✨【核心修复点】：协议刚性防错补全
+                // 如果资产名单里存的是纯 IP 或不带 http(s) 的裸域名，必须前置补上 http://
+                // 否则降级为直连时，浏览器会将其误判为当前大屏的“相对路径”，从而拼出怪异的重定向错误
+                if (!/^https?:\/\//i.test(cleanDomain)) {
+                    cleanDomain = `http://${cleanDomain}`;
+                }
+                
+                // 合成绝对标准的直连完整绝对 URL
+                const rawFullUrl = `${cleanDomain}${apiPath}`;
+                
+                // 1. 如果检测到目标节点本就是 https:// 加密通道，坚决不走中转，刚性直连放行
+                if (cleanDomain.toLowerCase().startsWith('https://')) {
+                    return rawFullUrl;
+                }
+                
+                // 2. 如果是明文 http:// 节点，且当前顺位主备链已成功锁定了可用的中转站
+                if (activeProxy.value) {
+                    return `${activeProxy.value}/kisamaproxy/${rawFullUrl}`;
+                }
+                
+                // 3. 💡 ✨【完美降级】：当中转池没有有效节点、或全部阵亡时，
+                // 由于上方已经刚性补全了 http:// 协议头，此处会稳稳地返回标准的绝对直连路径，绝不污染当前域名。
+                return rawFullUrl;
+            };
+
+            // 💡 ✨【核心新增：高可用顺序心跳探测器】
+            // 严格按 proxylist.txt 从上到下的行顺序探测，查出第一个可访问的并当场熔断锁定
+            const updateActiveProxy = async () => {
+                if (proxyPool.value.length === 0) {
+                    activeProxy.value = '';
+                    return;
+                }
+
+                for (const proxy of proxyPool.value) {
+                    try {
+                        const controller = new AbortController();
+                        // 3秒短超时快检测，防止某个死节点挂线导致页面长时间卡顿
+                        const timeoutId = setTimeout(() => controller.abort(), 3000);
+                        
+                        await fetch(proxy, { method: 'GET', mode: 'no-cors', signal: controller.signal });
+                        clearTimeout(timeoutId);
+                        
+                        // 🔒【顺序拦截成功】：只要当前行代理可触达（未抛出网络异常），立刻将其据为己有并退出循环
+                        activeProxy.value = proxy.replace(/\/+$/, '');
+                        console.log('[HA Failover] 集群主备链状态更新，当前锁定首个可用主代理:', activeProxy.value);
+                        return; 
+                    } catch (e) {
+                        console.warn(`[HA Failover] 顺位中转站失联 [跳过]: ${proxy}`);
+                    }
+                }
+                
+                // 如果极其不幸，整个 txt 里的所有代理全挂了，清空并打印警报
+                activeProxy.value = '';
+                console.error('[HA Failover] 危险！节点池内所有中转代理全线崩溃失联！');
+            };
+
+            // 资产流水深度筛选与四维基准排序
+            const filteredAndSortedNodes = computed(() => {
+                let result = nodes.value.filter(node => {
+                    if (statusFilter.value === 'online') return node.status === 'online';
+                    if (statusFilter.value === 'offline') return node.status === 'offline';
+                    return true;
+                });
+
+                return result.sort((a, b) => {
+                    if (sortBy.value === 'name') return a.name.localeCompare(b.name, 'zh-CN');
+                    if (sortBy.value === 'cpu') {
+                        const aCpu = a.status === 'online' && a.statusData ? a.statusData.cpu.usage : -1;
+                        const bCpu = b.status === 'online' && b.statusData ? b.statusData.cpu.usage : -1;
+                        return bCpu - aCpu;
+                    }
+                    if (sortBy.value === 'ram') {
+                        const aRam = a.status === 'online' && a.statusData ? (a.statusData.ram.used / a.statusData.ram.total) : -1;
+                        const bRam = b.status === 'online' && b.statusData ? (b.statusData.ram.used / b.statusData.ram.total) : -1;
+                        return bRam - aRam;
+                    }
+                    if (sortBy.value === 'disk') {
+                        const aDisk = a.status === 'online' && a.statusData ? (a.statusData.disk.used / a.statusData.disk.total) : -1;
+                        const bDisk = b.status === 'online' && b.statusData ? (b.statusData.disk.used / b.statusData.disk.total) : -1;
+                        return bDisk - aDisk;
+                    }
+                    return 0;
+                });
+            });
+
+            // 汇总计算
+            const onlineCount = computed(() => nodes.value.filter(n => n.status === 'online').length);
+            const totalSpeedDown = computed(() => nodes.value.reduce((sum, n) => sum + (n.statusData?.network?.down || 0), 0));
+            const totalSpeedUp = computed(() => nodes.value.reduce((sum, n) => sum + (n.statusData?.network?.up || 0), 0));
+            const totalTrafficDown = computed(() => nodes.value.reduce((sum, n) => sum + (n.statusData?.network?.totalDown || 0), 0));
+            const totalTrafficUp = computed(() => nodes.value.reduce((sum, n) => sum + (n.statusData?.network?.totalUp || 0), 0));
+
+            const fetchProxyList = async () => {
+                try {
+                    const res = await fetch('status.php?proxy=1');
+                    if (res.ok) {
+                        proxyPool.value = await res.json();
+                        console.log('[Proxy Pool] 已成功加载后端主备链名录数:', proxyPool.value.length);
+                    }
+                } catch (e) {
+                    console.error('[Proxy Pool] 获取代理池失败:', e);
+                }
+            };
+
+            const fetchNodeList = async () => {
+                try {
+                    const res = await fetch('status.php');
+                    if (!res.ok) return;
+                    const rawList = await res.json();
+                    
+                    nodes.value = rawList.map(item => ({
+                        id: item.id,
+                        name: item.name,
+                        domain: item.domain.replace(/\/+$/, ''), 
+                        status: 'offline', 
+                        countryCode: '', 
+                        baseData: null,
+                        statusData: null
+                    }));
+
+                    triggerAllImmediatePolls();
+                } catch (e) {
+                    console.error('读取 status.php 配置包失败:', e);
+                }
+            };
+
+            const triggerAllImmediatePolls = () => {
+                nodes.value.forEach(node => {
+                    pollBaseInfo(node);
+                    pollStatus(node);
+                });
+            };
+
+            const pollBaseInfo = async (node) => {
+                try {
+                    const res = await fetch(buildRequestUrl(node.domain, '/api/baseinfo'));
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json && typeof json === 'object' && 'arch' in json) {
+                            node.baseData = json;
+                            
+                            const ip = json.ipv4;
+                            if (ip) {
+                                if (isPrivateIP(ip)) {
+                                    node.countryCode = 'LOCAL';
+                                } else if (flagCache.has(ip)) {
+                                    node.countryCode = flagCache.get(ip);
+                                } else {
+                                    node.countryCode = 'checking';
+                                    fetch(`https://api.country.is/${ip}`)
+                                        .then(r => r.json())
+                                        .then(data => {
+                                            const code = data.country || 'UNKNOWN';
+                                            node.countryCode = code;
+                                            flagCache.set(ip, code);
+                                        })
+                                        .catch(() => { node.countryCode = 'UNKNOWN'; });
+                                }
+                            } else { node.countryCode = 'UNKNOWN'; }
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`[BaseInfo] 节点 ${node.name} 请求受阻.`);
+                }
+            };
+
+            const pollStatus = async (node) => {
+                try {
+                    const res = await fetch(buildRequestUrl(node.domain, '/api/status'));
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json && typeof json === 'object' && 'cpu' in json) {
+                            node.statusData = json;
+                            node.status = 'online'; 
+                            return;
+                        }
+                    }
+                    node.status = 'offline';
+                } catch (e) {
+                    node.status = 'offline';
+                }
+            };
+
+            const startDaemonTimers = () => {
+                // 每 30 秒全量并发刷新主机实时动态指标
+                setInterval(() => { nodes.value.forEach(n => pollStatus(n)); }, 30000);   
+                // 每 5 分钟全量并发刷新资产硬件静态环境
+                setInterval(() => { nodes.value.forEach(n => pollBaseInfo(n)); }, 300000); 
+                
+                // 💡 ✨【核心守护】：每 60 秒在后台静默给代理名录重新切脉，确保在首选代理崩流时能秒级顺延
+                setInterval(async () => {
+                    await updateActiveProxy();
+                }, 60000);
+            };
+
+            const formatBytes = (bytes) => {
+                if (bytes === 0 || !bytes) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            };
+
+            const formatSpeed = (bytesPerSec) => {
+                if (bytesPerSec === 0 || !bytesPerSec) return '0 KB/s';
+                const k = 1024;
+                if (bytesPerSec < k) return bytesPerSec.toFixed(0) + ' B/s';
+                if (bytesPerSec < k * k) return (bytesPerSec / k).toFixed(1) + ' KB/s';
+                return (bytesPerSec / (k * k)).toFixed(1) + ' MB/s';
+            };
+
+            const formatUptime = (seconds) => {
+                if (!seconds) return '0d';
+                const d = Math.floor(seconds / (3600 * 24));
+                const h = Math.floor((seconds % (3600 * 24)) / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                if (d > 0) return `${d}d ${h}h`;
+                if (h > 0) return `${h}h ${m}m`;
+                return `${m}m`;
+            };
+
+            const getShortOs = (os) => {
+                if (!os) return 'Linux';
+                return os.replace(/release/i, '').replace(/linux/i, '').trim();
+            };
+
+            onMounted(async () => {
+                // 1. 率先拉取中转池原始行文本名录
+                await fetchProxyList();
+                // 2. 💡 ✨ 刚性执行首轮高可用顺位扫描，强行锁定第一个生还的中转代理站
+                await updateActiveProxy();
+                // 3. 接入主机资产
+                fetchNodeList();
+                // 4. 释放后台常驻心跳与轮询线程
+                startDaemonTimers();
+            });
+
+            return {
+                viewMode, statusFilter, sortBy, filteredAndSortedNodes, nodes, onlineCount, activeProxy,
+                totalSpeedDown, totalSpeedUp, totalTrafficDown, totalTrafficUp,
+                formatBytes, formatSpeed, formatUptime, getShortOs, getBarColorClass
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
