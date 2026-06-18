@@ -1,29 +1,29 @@
-name: Generate Sync PHP Artifact
+name: Generate Full Project Artifact
 
 on:
   workflow_dispatch:
     inputs:
       token:
-        description: '请输入你希望设置的明文 Token (例如 kisama)'
+        description: '请输入你希望设置的明文 Token (例如 aba)'
         required: true
         type: string
 
 jobs:
-  generate-artifact:
+  generate-portfolio:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Calculate SHA-256 Hash & Replace in PHP
+      - name: Calculate SHA-256 Hash & Package Full Source
         run: |
           # 1. 获取输入的明文 Token 并计算其不可逆的 SHA-256 值
           PLAINTEXT_TOKEN="${{ github.event.inputs.token }}"
           TOKEN_HASH=$(echo -n "$PLAINTEXT_TOKEN" | sha256sum | awk '{print $1}')
           echo "计算得到的 SHA-256 哈希值为: $TOKEN_HASH"
           
-          # 2. 定位并锁定仓库中的目标 PHP 文件
+          # 2. 定位并锁定仓库中的目标 PHP 脚本
           if [ -f "status/sync.php" ]; then
             TARGET_FILE="status/sync.php"
           elif [ -f "sync.php" ]; then
@@ -34,18 +34,32 @@ jobs:
           fi
           echo "🎯 目标文件已锁定: $TARGET_FILE"
           
-          # 3. 使用 sed 正则强力精准替换认证哈希所在行
+          # 3. 使用 sed 正则强力精准替换原脚本中的认证哈希行
           sed -i "s/define('AUTH_TOKEN_HASH', '[^']*');/define('AUTH_TOKEN_HASH', '$TOKEN_HASH');/g" "$TARGET_FILE"
           
-          # 4. 🚨【检查这里】：必须创建 dist 目录并将文件复制过去，供下一步打包
+          # 4. 创建打包专用的纯净发布工作区 dist
           mkdir -p dist
+          
+          # 5. 💡 安全平铺收集：遍历根目录下除 dist 外的所有核心源码，统统复制到 dist 根目录下
+          # 这样可以确保解压 zip 压缩包后，index.html、status.php 全部在根目录，绝不嵌套
+          for file in *; do
+            if [ "$file" != "dist" ] && [ "$file" != "*" ]; then
+              cp -r "$file" dist/
+            fi
+          done
+          
+          # 6. 剔除可能残留的旧 status 子目录（防止原先结构残留导致重复）
+          rm -rf dist/status 2>/dev/null || true
+          
+          # 7. 🚨【核心覆盖】：将刚刚注入完最新安全哈希的最终版 sync.php 强行覆盖到 dist 的根目录
           cp "$TARGET_FILE" dist/sync.php
-          echo "✅ 安全哈希注入并成功提取到 dist/sync.php！"
+          
+          echo "✅ 全量源码收集完毕，全套项目已平铺移交至 dist/ 目录！"
 
-      # 5. 将 dist/sync.php 转化为网页端可下载的 Artifact 产物
-      - name: Upload Sync PHP as Artifact
+      # 8. 💡 ✨【重大升级】：将整个 dist 文件夹内部的所有平铺内容打包上报为 Artifact 产物
+      - name: Upload Full Project as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sync-php-release  # 产物压缩包名称
-          path: dist/sync.php     # 刚性指定的提取路径
+          name: kisama-status-full-release  # 网页端生成的完整全量源码压缩包名称
+          path: dist/                       # 注意最后的斜杠：这将把 dist 内部的文件直接平铺压缩到 zip 根目录下
           retention-days: 7
